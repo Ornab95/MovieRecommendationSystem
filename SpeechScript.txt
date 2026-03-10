@@ -1,0 +1,133 @@
+Movie Recommendation System — 5-Minute Presentation Script
+============================================================
+
+
+1. INTRODUCTION (~30 seconds)
+-----------------------------
+
+Good [morning/afternoon] everyone. Today I'm going to present my Movie Recommendation System — a full-stack application that recommends movies based on the one you already like.
+
+The idea is simple: you type in a movie title, and the system suggests 5 similar movies. But behind this simplicity, there's a powerful content-based filtering algorithm working on a dataset of nearly 5,000 movies from TMDB.
+
+Let me walk you through how I built it — starting from the data, going through the machine learning pipeline, the API, and finally the frontend.
+
+
+2. THE DATASET (~30 seconds)
+-----------------------------
+
+The backbone of this project is the TMDB 5000 dataset, which comes in two CSV files:
+
+  - tmdb_5000_movies.csv — contains movie metadata like title, overview, genres, and keywords
+  - tmdb_5000_credits.csv — contains the cast and crew information for each movie
+
+I merge these two datasets on the "title" column using Pandas, which gives me a single unified DataFrame with all the information I need about each movie.
+
+After merging, I select only the relevant columns: movie_id, title, overview, genres, keywords, cast, and crew. I also handle missing values by dropping any rows with null data using dropna().
+
+
+3. DATA PREPROCESSING & FEATURE ENGINEERING (~1 minute 30 seconds) [KEY SECTION]
+----------------------------------------------------------------------------------
+
+This is where the real magic happens. The raw data is in JSON-like string format — genres, keywords, cast, and crew are all stored as stringified lists of dictionaries. So I wrote custom parsing functions using Python's ast.literal_eval() to extract just the names.
+
+For example:
+  - For genres and keywords, I extract all the name values
+  - For cast, I limit it to the top 3 actors — because the lead actors define the movie's identity more than supporting cast
+  - For crew, I specifically extract only the Director, since the director has the most influence on a movie's style and content
+
+Next, I apply a critical step: I remove all spaces from multi-word names. For example, "Sam Worthington" becomes "SamWorthington". Why? Because later, when we convert text to numerical vectors, "Sam" and "Worthington" would be treated as two separate words. By joining them, the algorithm understands that "SamWorthington" is a single unique entity.
+
+Then I create a new column called "tags" by concatenating the overview, keywords, cast, and crew into a single list of words. This gives each movie a unique text fingerprint.
+
+Finally, I convert everything to lowercase for consistency — so "Action" and "action" are treated the same way.
+
+
+4. TEXT VECTORIZATION & SIMILARITY COMPUTATION (~1 minute) [KEY SECTION]
+-------------------------------------------------------------------------
+
+Now comes the core machine learning part.
+
+I use scikit-learn's CountVectorizer to convert each movie's tags into a numerical vector. I set max_features=5000, which means I take the 5,000 most frequent words across all movies. I also enable stop_words='english' to filter out common words like "the", "is", "and" — words that don't carry meaning for recommendations.
+
+The result is a sparse matrix where each row represents a movie and each column represents a word. The values indicate how many times that word appears in that movie's tags.
+
+Once I have these vectors, I compute the cosine similarity between every pair of movies. Cosine similarity measures the angle between two vectors — if two movies share similar words, the angle is small and the similarity score is close to 1.
+
+This gives me a similarity matrix — a 4,800 x 4,800 matrix where each cell tells me how similar movie A is to movie B.
+
+
+5. THE RECOMMENDATION FUNCTION (~30 seconds)
+----------------------------------------------
+
+The recommend() function is straightforward:
+
+  1. It takes a movie title as input
+  2. Finds that movie's index in our DataFrame
+  3. Retrieves the similarity scores for that movie against all other movies
+  4. Sorts them in descending order
+  5. Returns the top 5 most similar movies (excluding the input movie itself)
+
+For example, if you search for "Avatar", you get recommendations like Apollo 18, Aliens, Lifeforce — all sci-fi movies with similar themes.
+
+
+6. THE API LAYER — FASTAPI (~30 seconds)
+------------------------------------------
+
+To serve these recommendations, I built a REST API using FastAPI.
+
+FastAPI was chosen because it's fast, lightweight, and automatically generates interactive API documentation.
+
+The API has three endpoints:
+  - GET /                          — a health check that confirms the API is running
+  - GET /recommend?movie_name=Avatar — takes a movie name and returns 5 recommendations as JSON
+  - GET /movies                    — returns the complete list of available movie titles
+
+I also added CORS middleware to allow the frontend to communicate with the backend from a different origin.
+
+
+7. FRONTEND — BRIEF OVERVIEW (~20 seconds)
+--------------------------------------------
+
+On the frontend, I used Angular with TailwindCSS to create a responsive, modern UI with both dark mode and light mode support.
+
+The user types a movie name, hits "Recommend", and the frontend calls the FastAPI backend. The results are displayed as numbered cards showing each recommended movie.
+
+
+8. CONCLUSION (~20 seconds)
+-----------------------------
+
+To summarize — this project demonstrates a complete end-to-end machine learning pipeline:
+
+  1. Data collection from TMDB
+  2. Preprocessing and feature engineering with Pandas
+  3. Vectorization using CountVectorizer
+  4. Similarity computation using cosine similarity
+  5. API serving with FastAPI
+  6. Frontend delivery with Angular
+
+The system is fast, scalable, and can be extended with poster images, ratings, or even a hybrid filtering approach in the future.
+
+Thank you! I'd be happy to take any questions.
+
+
+============================================================
+POSSIBLE Q&A ANSWERS
+============================================================
+
+Q: Why content-based filtering over collaborative?
+A: We don't need user interaction data. Content-based works with movie metadata alone.
+
+Q: Why cosine similarity over Euclidean distance?
+A: Cosine measures direction (topic similarity), not magnitude. Two movies with different amounts of text but similar topics will still score high.
+
+Q: Why limit cast to 3?
+A: Lead actors define a movie's identity; including all actors adds noise.
+
+Q: Why CountVectorizer over TF-IDF?
+A: For simplicity. TF-IDF could improve results by weighting rare terms higher — it's a good future enhancement.
+
+Q: Why FastAPI over Flask/Django?
+A: FastAPI is async-ready, auto-generates docs, has built-in validation, and is significantly faster.
+
+Q: How many movies are in the dataset?
+A: Approximately 4,800 movies after cleaning.

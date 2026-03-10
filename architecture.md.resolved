@@ -1,0 +1,240 @@
+# 🎬 Movie Recommendation System — Full Architecture
+
+A content-based movie recommendation engine with an **Angular 21** frontend and a **Python / FastAPI** backend powered by **NLP + Cosine Similarity**.
+
+---
+
+## High-Level System Diagram
+
+```mermaid
+graph LR
+  subgraph Frontend["Frontend · Angular 21 + TailwindCSS v4"]
+    UI["MovieSearchComponent"]
+    SVC["MovieService (HttpClient)"]
+    UI -->|user types movie| SVC
+  end
+
+  subgraph Backend["Backend · Python / FastAPI"]
+    API["FastAPI Server (Uvicorn)"]
+    ML["ML Pipeline (model.py)"]
+    DATA["TMDB 5000 Dataset (CSV)"]
+    ML -->|reads on startup| DATA
+    API -->|calls| ML
+  end
+
+  SVC -->|"HTTP GET /recommend?movie_name=..."| API
+  API -->|"JSON { recommendations[] }"| SVC
+  SVC -->|updates signals| UI
+```
+
+---
+
+## 1 · Data Flow (How a Request Travels)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant NG as Angular App
+    participant SVC as MovieService
+    participant API as FastAPI /recommend
+    participant ML as model.recommend()
+
+    U->>NG: Types "Inception" + clicks Recommend
+    NG->>SVC: getRecommendations("Inception")
+    SVC->>API: GET /recommend?movie_name=Inception
+    API->>ML: recommend("Inception")
+    ML-->>API: ["Interstellar", "The Dark Knight", ...]
+    API-->>SVC: { movie, recommendations[] }
+    SVC-->>NG: Observable emits response
+    NG-->>U: Renders 5 movie cards
+```
+
+---
+
+## 2 · Backend Architecture
+
+### 2.1 File Structure
+
+| File | Purpose |
+|---|---|
+| [main.py](file:///d:/Code/Python/MovieRecommendationSystem/Backend/main.py) | FastAPI app, CORS config, 3 API routes |
+| [model.py](file:///d:/Code/Python/MovieRecommendationSystem/Backend/model.py) | Data loading, feature engineering, ML pipeline |
+| `asset/dataset/` | Two TMDB CSVs (`tmdb_5000_movies.csv`, `tmdb_5000_credits.csv`) |
+
+### 2.2 API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Health check — returns status message |
+| `GET` | `/recommend?movie_name=<title>` | Returns 5 similar movies |
+| `GET` | `/movies` | Lists all ~4800 movie titles (for autocomplete) |
+
+### 2.3 ML Pipeline (model.py) — Step by Step
+
+The entire pipeline runs **once at server startup** (module-level code), building an in-memory similarity matrix.
+
+```mermaid
+flowchart TD
+    A["1 · Load CSVs"] --> B["2 · Merge on title"]
+    B --> C["3 · Select columns: title, overview, genres, keywords, cast, crew"]
+    C --> D["4 · Parse JSON strings (ast.literal_eval)"]
+    D --> E["5 · Extract top-3 cast + director only"]
+    E --> F["6 · Concatenate all features → 'tages' column"]
+    F --> G["7 · Lowercase + Porter Stemming"]
+    G --> H["8 · CountVectorizer (top 5000 words, English stopwords removed)"]
+    H --> I["9 · Cosine Similarity Matrix (4800 × 4800)"]
+    I --> J["10 · recommend(movie) → top-5 similar titles"]
+```
+
+**Key details:**
+
+- **Feature engineering**: Genres, keywords, top-3 cast members, and director(s) are extracted from nested JSON strings, spaces removed, then concatenated with the overview into a single `tages` bag-of-words column.
+- **NLP processing**: Text is lowercased, then Porter-stemmed (e.g., "loving" → "love") to normalize vocabulary.
+- **Vectorization**: `CountVectorizer(max_features=5000, stop_words='english')` converts each movie's tag string into a 5000-dimensional vector.
+- **Similarity**: `cosine_similarity()` computes pairwise similarity across all ~4800 movies, producing a dense matrix stored in memory.
+- **Recommendation**: Given a movie title, the [recommend()](file:///d:/Code/Python/MovieRecommendationSystem/Backend/model.py#118-128) function looks up its row in the similarity matrix, sorts by descending similarity, and returns the top 5.
+
+### 2.4 How It Runs
+
+```bash
+# From /Backend directory
+uvicorn main:app --reload    # starts on http://localhost:8000
+```
+
+---
+
+## 3 · Frontend Architecture
+
+### 3.1 Tech Stack
+
+| Technology | Version | Role |
+|---|---|---|
+| **Angular** | 21.2 | Component framework (Standalone components, Signals) |
+| **TailwindCSS** | 4.x | Utility-first styling via PostCSS |
+| **RxJS** | 7.8 | Async HTTP communication |
+| **TypeScript** | 5.9 | Type safety |
+| **SSR** | `@angular/ssr` | Server-side rendering support (Express) |
+
+### 3.2 File Structure
+
+```
+src/app/
+├── app.ts                    # Root component (imports MovieSearchComponent)
+├── app.html                  # Root template (<router-outlet> + component)
+├── app.config.ts             # provideHttpClient, provideRouter, hydration
+├── app.routes.ts             # Empty routes (single-page app)
+├── components/
+│   └── movie-search/
+│       ├── movie-search.component.ts     # Component logic (Signals)
+│       └── movie-search.component.html   # Full UI template
+└── services/
+    └── movie.service.ts      # HTTP client, error handling
+```
+
+### 3.3 Component Architecture
+
+```mermaid
+graph TD
+    Root["App (root component)"] --> Search["MovieSearchComponent"]
+    Search --> SVC["MovieService"]
+    SVC -->|"HttpClient GET"| API["Backend API :8000"]
+
+    style Root fill:#6366f1,color:#fff
+    style Search fill:#8b5cf6,color:#fff
+    style SVC fill:#a855f7,color:#fff
+    style API fill:#059669,color:#fff
+```
+
+#### MovieSearchComponent ([movie-search.component.ts](file:///d:/Code/Python/MovieRecommendationSystem/Frontend/MovieRecommendationSystem/src/app/components/movie-search/movie-search.component.ts))
+
+Uses **Angular Signals** for reactive state:
+
+| Signal | Type | Purpose |
+|---|---|---|
+| `loading` | `boolean` | Shows spinner, disables input/button |
+| `errorMessage` | `string \| null` | Displays error alert |
+| [recommendations](file:///d:/Code/Python/MovieRecommendationSystem/Backend/main.py#21-34) | `string[]` | The 5 recommended movie titles |
+| `currentMovie` | `string \| null` | The movie that was searched |
+| `isDarkMode` | `boolean` | Toggles light/dark theme |
+
+**Search flow**: User types → [searchMovie()](file:///d:/Code/Python/MovieRecommendationSystem/Frontend/MovieRecommendationSystem/src/app/components/movie-search/movie-search.component.ts#26-47) → sets `loading(true)` → calls `MovieService.getRecommendations()` → on success, sets [recommendations](file:///d:/Code/Python/MovieRecommendationSystem/Backend/main.py#21-34) + `currentMovie`; on error, sets `errorMessage`.
+
+#### MovieService ([movie.service.ts](file:///d:/Code/Python/MovieRecommendationSystem/Frontend/MovieRecommendationSystem/src/app/services/movie.service.ts))
+
+- **Base URL**: `http://localhost:8000`
+- Sends `GET /recommend?movie_name=<encoded_title>`
+- Returns `Observable<MovieRecommendationResponse>`
+- Error handling: distinguishes client-side vs. server-side errors, surfaces 404 as "Movie not found"
+
+### 3.4 UI Features
+
+| Feature | Implementation |
+|---|---|
+| **Dark/Light mode** | Signal toggle + TailwindCSS `dark:` variants |
+| **Enter-to-search** | [(keyup.enter)="searchMovie()"](file:///d:/Code/Python/MovieRecommendationSystem/Frontend/MovieRecommendationSystem/src/app/app.ts#5-14) on input |
+| **Loading state** | Button shows spinner + "Searching…", input disabled |
+| **Error display** | Red alert banner with icon |
+| **Results grid** | Responsive 1→2→3 column card grid |
+| **Hover effects** | Cards lift + shadow on hover with gradient overlay |
+
+### 3.5 How It Runs
+
+```bash
+# From /Frontend/MovieRecommendationSystem directory
+ng serve    # starts on http://localhost:4200 (proxies to :8000)
+```
+
+---
+
+## 4 · Communication Between Frontend & Backend
+
+```mermaid
+flowchart LR
+    A["Angular :4200"] -- "CORS-enabled HTTP" --> B["FastAPI :8000"]
+```
+
+- **CORS**: Backend allows all origins (`allow_origins=["*"]`) so the Angular dev server at `:4200` can call the API at `:8000`.
+- **Data format**: JSON over HTTP GET, no authentication.
+- **Response structure**:
+
+```json
+{
+  "movie": "Inception",
+  "recommendations": [
+    "Interstellar",
+    "The Dark Knight",
+    "The Prestige",
+    "Shutter Island",
+    "Memento"
+  ]
+}
+```
+
+---
+
+## 5 · Full Tech Stack Summary
+
+```mermaid
+graph TB
+    subgraph Frontend
+        A1["Angular 21"] --> A2["TailwindCSS v4"]
+        A1 --> A3["RxJS (HttpClient)"]
+        A1 --> A4["Signals (State)"]
+        A1 --> A5["SSR (Express)"]
+    end
+
+    subgraph Backend
+        B1["FastAPI"] --> B2["Uvicorn"]
+        B1 --> B3["Pandas + NumPy"]
+        B1 --> B4["scikit-learn"]
+        B1 --> B5["NLTK (Stemming)"]
+    end
+
+    subgraph Data
+        D1["TMDB 5000 Movies CSV"]
+        D2["TMDB 5000 Credits CSV"]
+    end
+
+    Frontend -->|"REST API over HTTP"| Backend
+    Backend -->|"reads at startup"| Data
+```

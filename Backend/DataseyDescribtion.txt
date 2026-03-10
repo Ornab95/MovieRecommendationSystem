@@ -1,0 +1,44 @@
+# TMDB 5000 Movie Dataset Description
+
+There are two main datasets located in the `asset/dataset/` directory: `tmdb_5000_movies.csv` and `tmdb_5000_credits.csv`.
+
+## 1. tmdb_5000_movies.csv
+This dataset contains metadata about approximately 5000 movies from The Movie Database (TMDB). The data includes financial, categorical, and descriptive information about each movie.
+
+**Columns:**
+- `budget`: The budget of the movie in dollars.
+- `genres`: A JSON format list containing all the genres associated with the movie (e.g., Action, Adventure, Science Fiction).
+- `homepage`: The movie's official website URL.
+- `id`: The unique TMDB identifier for the movie.
+- `keywords`: A JSON format list containing keywords/tags describing the movie.
+- `original_language`: The language in which the movie was originally spoken.
+- `original_title`: The original title of the movie.
+- `overview`: A brief text plot summary or synopsis of the movie.
+- `popularity`: A numeric popularity score for the movie.
+- `production_companies`: A JSON format list of companies involved in the production.
+- `production_countries`: A JSON format list of countries where the movie was produced.
+- `release_date`: The date the movie was released (YYYY-MM-DD).
+- `revenue`: The worldwide box office revenue of the movie in dollars.
+- `runtime`: The duration of the movie in minutes.
+- `spoken_languages`: A JSON format list of languages spoken in the movie.
+- `status`: The release status of the movie (e.g., "Released").
+- `tagline`: The movie's promotional tagline.
+- `title`: The official translated English title of the movie.
+- `vote_average`: The average viewer rating of the movie (out of 10).
+- `vote_count`: The total number of votes the movie has received.
+
+## 2. tmdb_5000_credits.csv
+This dataset contains comprehensive credit information (cast and crew) for the same movies, which can be easily linked to the movies table.
+
+**Columns:**
+- `movie_id`: The unique TMDB identifier for the movie. This corresponds to the `id` column in the movies dataset.
+- `title`: The title of the movie.
+- `cast`: A JSON format array detailing the actors in the movie. Each entry contains information like the actor's `name`, `gender`, `character` played, `id`, and their billing `order`.
+- `crew`: A JSON format array detailing the behind-the-scenes personnel. Each entry contains the crew member's `name`, `gender`, `department`, `job` (e.g., Director, Screenplay, Original Music Composer), and `id`.
+
+## Usage / Joining
+You can combine these two datasets into a single Pandas DataFrame by joining the movies dataset's `id` column with the credits dataset's `movie_id` or `title` column:
+```python
+movies_df = pd.merge(movies_df, credits_df, left_on='id', right_on='movie_id')
+```
+This combined data is often used for building robust content-based filtering or collaborative filtering movie recommendation systems.
